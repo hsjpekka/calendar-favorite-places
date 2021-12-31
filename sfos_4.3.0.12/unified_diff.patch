@@ -1,0 +1,146 @@
+--- /usr/share/jolla-calendar/pages/EventEditPage.qml
++++ /usr/share/jolla-calendar/pages/EventEditPage.qml
+@@ -173,6 +173,25 @@
+                 }
+             }
+ 
++            ListItem { // ===> patch calendar-favorite-places
++                id: favoritePlacesItem
++                menu: ContextMenu {
++                    Repeater {
++                        model: favoritePlacesModel
++                        delegate: MenuItem {
++                            text: place
++                            onClicked: {
++                                if (index === 0) { // store
++                                    favoritePlacesModel.storePlace(eventLocation.text)
++                                } else { // read stored strings
++                                    eventLocation.text = text
++                                    eventDescription.focus = true
++                                }
++                            }
++                        }
++                    }
++                }
++
+             TextField {
+                 id: eventLocation
+ 
+@@ -181,7 +200,10 @@
+                 label: placeholderText
+                 width: parent.width
+                 EnterKey.iconSource: "image://theme/icon-m-enter-next"
+-                EnterKey.onClicked: eventDescription.focus = true
++                EnterKey.onClicked: eventDescription.focus = true
++                onPressAndHold: {
++                    favoritePlacesItem.openMenu()
++                }
+ 
+                 Private.AutoFill {
+                     id: locationAutoFill
+@@ -189,6 +211,74 @@
+                 }
+             }
+ 
++                ConfigurationValue {
++                    id: favoritePlaces
++                    key: "/apps/patchmanager/calendar-favorite-place/place"
++                    defaultValue: [""]                    
++                }
++
++                ListModel {
++                    id: favoritePlacesModel
++                    ListElement {
++                        place: qsTr("save")
++                    }
++
++                    function addToMenu(address) {
++                        favoritePlacesModel.append({"place": address});
++                        return;
++                    }
++
++                    function checkDuplicate(txt) {
++                        var i = 0, result = 0, str = "";
++                        txt = txt.toLocaleLowerCase();
++                        if (Array.isArray(favoritePlaces.value)) {
++                            while (i < favoritePlaces.value.length) {
++                                str = favoritePlaces.value[i].toLocaleLowerCase();
++                                if (str.length === txt.length && str.search(txt) >= 0) {
++                                    result = i+1;
++                                    i = favoritePlaces.value.length;
++                                }
++                                i++;
++                            }
++                        } else {
++                            result = -1;
++                        }
++
++                        return result;
++                    }
++
++                    function storeLatest() {
++                        var i = 1, list = [];
++                        if (checkDuplicate(eventLocation.text) === 0) {
++                            list.push(eventLocation.text);
++                            while (i < favoritePlaces.value.length) {
++                                list.push(favoritePlaces.value[i]);
++                                i++;
++                            }
++                            favoritePlaces.value = list;
++                            favoritePlaces.sync();
++                        }
++                        return;
++                    }
++
++                    function storePlace(address) {
++                        var list = [], i;
++
++                        addToMenu(address);
++                        i = 1; // the fist list item is "save"
++                        while (i < favoritePlacesModel.count) {
++                            list.push(favoritePlacesModel.get(i).place);
++                            i++;
++                        }
++
++                        favoritePlaces.value = list;
++                        favoritePlaces.sync();
++                        return;
++                    }
++                }
++
++            } // patch <===
++
+             TextArea {
+                 id: eventDescription
+ 
+@@ -714,7 +804,18 @@
+             date.setHours(date.getHours() + 1)
+             dateSelector.setEndDate(date)
+             reminder.followSettings = true
+-        }
++        }
++
++        // ===> patch
++        var i
++        if (Array.isArray(favoritePlaces.value)) {
++            i = 0
++            while (i < favoritePlaces.value.length) {
++                favoritePlacesModel.addToMenu(favoritePlaces.value[i])
++                i++
++            }
++        }
++        // <=== patch
+     }
+ 
+     onAccepted: {
+@@ -777,5 +878,10 @@
+         }
+ 
+         app.syncHelper.triggerUpdateDelayed(modification.calendarUid)
++        // ===> patch calendar-favorite-places
++        if (eventLocation.text > "") {
++            favoritePlacesModel.storeLatest();
++        }
++        // <=== patch calendar-favorite-places
+     }
+ }
